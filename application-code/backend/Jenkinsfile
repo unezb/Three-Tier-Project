@@ -1,0 +1,125 @@
+pipeline {
+  agent any
+
+  tools {
+    jdk 'jdk'
+    nodejs 'nodejs'
+  }
+
+  environment {
+    SCANNER_HOME = tool 'sonar-scanner'
+
+    AWS_DEFAULT_REGION = 'us-east-1'
+    AWS_ACCOUNT_ID = '628590695807'
+    AWS_ECR_REPO_NAME = 'backend'
+
+    REPOSITORY_URI = '${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com'
+    IMAGE_TAG = '${BUILD_NUMBER}'
+
+    GIT_REPO_NAME = "Three-Tier-Project"
+    GIT_USER_NAME = "unezb"
+  }
+
+  stages {
+
+    stage('Clean Workspace') {
+      steps {
+        cleanWs()
+      }
+    }
+
+    stage('Checkout Code') {
+      steps {
+        git branch: 'main', url: 'https://github.com/unezb/Three-Tier-Project.git'
+      }
+    }
+
+    stage('SonarQube Analysis') {
+      steps {
+        dir('application-code/backend') {
+          withSonarQubeEnv('sonar-server') {
+            sh """
+            ${SCANNER_HOME}/bin/sonar-scanner \
+            -Dsonar.projectName=three-tier-backend \
+            -Dsonar.projectKey=three-tier-backend \
+            -Dsonar.sources=.
+            """
+          }
+        }
+      }
+    }
+
+    stage('Quality Gate') {
+      steps {
+        script {
+          waitForQualityGate abortPipeline: true
+        }
+      }
+    }
+
+    stage('Docker build') {
+      steps {
+        dir('application-code/backend') {
+          sh """
+          docker system prune -f
+          docker build -t ${AWS_ECR_REPO_NAME}:${IMAGE_TAG} .
+          """
+        }
+      }
+    }
+
+    stage('Image Tag') {
+      steps {
+        sh """
+        docker tag ${AWS_ECR_REPO_NAME}:${IMAGE_TAG} ${REPOSITORY_URI}/${AWS_ECR_REPO_NAME}:${IMAGE_TAG}
+        """ 
+      }
+    }
+
+    stage('ECR Login') {
+      steps {
+        sh """
+        aws ecr get-login-password --region ${AWS_DEFAULT_REGION} \
+        | docker login --username AWS --password-stdin ${REPOSITORY_URI}
+        """
+      }
+    }
+
+    stage('Push to ECR') {
+      steps {
+        sh """
+        docker push ${REPOSITORY_URI}/${AWS_ECR_REPO_NAME}:${IMAGE_TAG}
+        """
+      }
+    }
+
+    stage('Update Helm Values'){
+      steps {
+        dir('three-tier-app') {
+          withCredentials([string(credentialsId: 'github-token', variable: 'GITHUB_TOKEN')]) {
+            sh """
+            git config user.email "jenkins@local"
+            git config user.name "jenkins"
+
+            git checkout main
+            git pull origin main
+
+            echo "Updating backend image to ${IMAGE_TAG}"
+
+            # Update repository
+            sed -i "/backend:/,/tag:/ s|repository:.*|repository: ${REPOSITORY_URI}/backend|" values.yaml
+
+            # Update backend tag
+            sed -i "/backend:/,/tag:/ s|tag:.*|tag: \"${IMAGE_TAG}\"|" values.yaml
+
+            git add values.yaml
+            git commit -m "Update backend image to ${IMAGE_TAG}" || echo "No changes to commit"
+
+            git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git HEAD:main
+            """
+          }
+        }
+      }
+    }
+  }
+}

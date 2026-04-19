@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: three-tier-app
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.agrocd.argoproj.io # cleans up K8s resources when app is deleted
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/unezb/Three-Tier-Project.git
+    targetRevision: main
+    path: three-tier-app
+    helm:
+      valueFiles:
+        - values.yaml
+  
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: three-tier
+  
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground # safe ordered deletion

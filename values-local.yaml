@@ -1,0 +1,30 @@
+# values-local.yaml
+# Only contains what's different from values.yaml for local Minikube
+
+frontend:
+  image:
+    repository: frontend     # local image name (no registry prefix)
+    tag: local
+    pullPolicy: Never        # CRITICAL: tells K8s never to pull from a registry
+  port: 80
+  service:
+    port: 80
+  replicaCount: 1            # save resources locally
+
+backend:
+  image:
+    repository: backend
+    tag: local
+    pullPolicy: Never        # same here
+  replicaCount: 1
+
+mongodb:
+  storage:
+    storageClassName: standard   # Minikube's built-in storage class (not gp2)
+
+ingress:
+  enabled: true
+  className: nginx               # Minikube uses nginx, not alb
+  host: three-tier.local         # local hostname, added to /etc/hosts
+  annotations:
+    kubernetes.io/ingress.class: nginx   # override the ALB annotation

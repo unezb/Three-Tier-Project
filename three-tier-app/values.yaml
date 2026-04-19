@@ -1,0 +1,72 @@
+namespace: three-tier
+
+frontend:
+  image:
+    repository: 628590695807.dkr.ecr.us-east-1.amazonaws.com/frontend
+    tag: 1
+    pullPolicy: Always
+  replicaCount: 2
+  port: 80
+  service:
+    type: ClusterIP
+    port: 80
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "300m"
+      memory: "256Mi"
+
+backend:
+  image:
+    repository: 628590695807.dkr.ecr.us-east-1.amazonaws.com/backend
+    tag: 6
+    pullPolicy: Always
+  replicaCount: 2
+  port: 3500
+  service:
+    type: ClusterIP
+    port: 3500
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "300m"
+      memory: "512Mi"
+
+mongodb:
+  image:
+    repository: mongo
+    tag: "6.0"
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  port: 27017
+  service:
+    type: ClusterIP
+    port: 27017
+  storage:
+    size: 5Gi
+    storageClassName: gp2
+  auth:
+    secretName: mongodb-credentials
+    dbName: todo
+
+ingress:
+  enabled: true
+  className: alb
+  #host: app.yourdomain.com
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+
+aws:
+  region: us-east-1
+  secretName: mongodb-credentials
+
+#ingress:
+#  enabled: true
+#  className: nginx
+#  annotations: {}

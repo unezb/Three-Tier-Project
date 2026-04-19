@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: backend
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    version: {{ .Chart.AppVersion }}
+spec:
+  nodeSelector:
+    role: app
+  replicas: {{ .Values.backend.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 25%
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.backend.port }}
+          
+          env:
+            - name: MONGO_CONN_STR
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mongodb.auth.secretName }}
+                  key: MONGO_URI
+            
+            - name: PORT
+              value: {{ .Values.backend.port | quote }}
+
+            - name: NODE_ENV
+              value: "PROD"
+          
+          resources:
+            requests:
+              cpu: {{ .Values.backend.resources.requests.cpu }}
+              memory: {{ .Values.backend.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.backend.resources.limits.cpu }}
+              memory: {{ .Values.backend.resources.limits.memory }}
+            
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.backend.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: {{ .Values.backend.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 20
